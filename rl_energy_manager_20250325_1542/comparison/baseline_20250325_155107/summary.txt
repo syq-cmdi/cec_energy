@@ -1,0 +1,8 @@
+Energy Management System Results
+=============================
+
+Total Load: 5088.66 kWh
+Total PV Generation: 3956.90 kWh
+Grid Dependency: 26.34%
+Self-Sufficiency: 73.66%
+Energy Sharing: 598.21 kWh

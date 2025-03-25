@@ -1,0 +1,28 @@
+RL vs Baseline Policy Comparison Report
+=====================================
+
+Metrics:
+Self-Sufficiency (%):
+  RL Policy: 19.53
+  Baseline: 73.66
+  Difference: -54.13
+  Improvement: -73.48%
+
+Energy Sharing (kWh):
+  RL Policy: 0.00
+  Baseline: 598.21
+  Difference: -598.21
+  Improvement: -100.00%
+
+Grid Import (kWh):
+  RL Policy: 4094.65
+  Baseline: 1340.23
+  Difference: 2754.42
+  Improvement: -205.52%
+
+Grid Export (kWh):
+  RL Policy: 0.00
+  Baseline: 0.00
+  Difference: 0.00
+  Improvement: 0.00%
+
