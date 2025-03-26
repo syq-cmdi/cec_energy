@@ -2,6 +2,7 @@ import numpy as np
 from datetime import datetime
 import sys
 import os
+import types
 
 # Add parent directory to path to import test.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -71,8 +72,37 @@ class RLEnergyManager:
         self.last_energy_sharing = 0
         self.last_shortfall = 0
         
-        # 存储原始_process_timestep方法，以便在执行强化学习动作后调用
+        # 保存原始_process_timestep方法，并替换为增强版本
         self.original_process_timestep = self.energy_manager._process_timestep
+        self.energy_manager._process_timestep = types.MethodType(self._enhanced_process_timestep, self.energy_manager)
+        
+    def _enhanced_process_timestep(self, energy_manager):
+        """
+        增强版的_process_timestep方法，接受并应用RL动作
+        
+        Args:
+            energy_manager: 能量管理器实例
+        """
+        # 首先应用当前的RL决策到各节点和云储能
+        if hasattr(energy_manager, 'current_rl_actions'):
+            actions = energy_manager.current_rl_actions
+            
+            # 应用节点动作
+            for i, node in enumerate(energy_manager.edge_nodes):
+                if i < len(actions) - 1:
+                    # 设置节点放电修饰器
+                    # 将[-1,1]范围的动作转换为[0,1]范围的放电修饰器
+                    # 值越低，越倾向于放电/共享能量
+                    discharge_modifier = (1.0 + actions[i]) / 2.0
+                    node.rl_discharge_modifier = discharge_modifier
+            
+            # 应用云储能动作
+            if len(actions) > 0:
+                cloud_action = actions[-1]
+                energy_manager.cloud_storage.rl_action = cloud_action
+        
+        # 调用原始方法
+        self.original_process_timestep()
         
     def get_state(self):
         """
@@ -130,19 +160,17 @@ class RLEnergyManager:
         # 保存动作历史
         self.action_history.append(action.copy())
         
-        # 应用RL动作到能量管理系统
-        self._apply_rl_actions(action)
-        
-        # 执行一步仿真（调用原始的_process_timestep方法）
-        t = self.current_hour
+        # 设置当前RL动作
+        self.energy_manager.current_rl_actions = action
         
         # 记录操作前的状态
         pre_grid_draw_total = sum(self.energy_manager.grid_draw_history) if self.energy_manager.grid_draw_history else 0
         pre_grid_feed_total = sum(self.energy_manager.grid_feed_history) if self.energy_manager.grid_feed_history else 0
         pre_energy_sharing = sum(node.energy_received_from_sharing for node in self.energy_manager.edge_nodes)
         
-        # 执行时间步 - 不传递参数self.energy_manager
-        self.original_process_timestep()
+        # 执行一步仿真
+        t = self.current_hour
+        self.energy_manager._process_timestep()
         
         # 计算这一步的实际指标变化
         grid_draw_total = sum(self.energy_manager.grid_draw_history)
@@ -190,39 +218,6 @@ class RLEnergyManager:
         
         return next_state, reward, self.done, info
     
-    def _apply_rl_actions(self, action):
-        """
-        应用RL决策到能量管理系统
-        
-        Args:
-            action: RL动作向量
-        """
-        # 提取边缘节点动作和云端动作
-        edge_actions = action[:self.num_nodes]
-        cloud_action = action[-1]
-        
-        # 修改节点行为 - 在原始能量管理器中添加RL影响参数
-        for i, node_action in enumerate(edge_actions):
-            if i < len(self.energy_manager.edge_nodes):
-                node = self.energy_manager.edge_nodes[i]
-                
-                # 设置节点特性修改器
-                # 修改节点的放电行为
-                discharge_modifier = 0.5 - 0.5 * node_action  # 将[-1,1]映射到[1,0]范围
-                
-                # 临时添加属性到节点，将在_process_timestep中使用
-                node.rl_discharge_modifier = discharge_modifier
-                
-                # 打印日志以便调试
-                if i == 0 and self.current_hour % 10 == 0:
-                    print(f"Node {i+1} action: {node_action:.3f}, discharge mod: {discharge_modifier:.3f}")
-                
-        # 设置云储能特性修改器
-        self.energy_manager.cloud_storage.rl_action = cloud_action
-        
-        # 只需在此添加这些特性即可，真正的影响需要在能量管理器的_process_timestep中实现
-        # 为了实际实现RL集成，需要在原始_process_timestep中添加对这些RL动作的处理
-    
     def _calculate_reward(self, grid_draw, grid_feed, energy_shared, shortfall):
         """
         计算多目标奖励函数
@@ -236,11 +231,11 @@ class RLEnergyManager:
         Returns:
             reward: 综合奖励
         """
-        # 奖励权重 - 调整以获得更好的训练效果
-        w_grid_draw = -2.0  # 减少从电网购电
-        w_grid_feed = -0.5  # 适度减少向电网售电 (损失能量)
-        w_energy_shared = 3.0  # 鼓励节点间能量共享
-        w_shortfall = -8.0  # 严重惩罚负载缺口
+        # 奖励权重 - 显著提高能量共享和减少短缺的权重
+        w_grid_draw = -2.0    # 减少从电网购电
+        w_grid_feed = -0.5    # 适度减少向电网售电 (损失能量)
+        w_energy_shared = 4.0 # 强烈鼓励节点间能量共享
+        w_shortfall = -8.0    # 严重惩罚负载缺口
         
         # 归一化各项指标
         # 使用更合理的基准值进行归一化
@@ -260,6 +255,10 @@ class RLEnergyManager:
                   w_grid_feed * norm_grid_feed + 
                   w_energy_shared * norm_energy_shared + 
                   w_shortfall * norm_shortfall)
+        
+        # 添加额外奖励以激励能量共享增长
+        if energy_shared > self.last_energy_sharing:
+            reward += 1.0  # 额外奖励能量共享增加的行为
         
         # 打印调试信息，了解奖励构成
         if self.current_hour % 20 == 0:
@@ -288,8 +287,9 @@ class RLEnergyManager:
             start_time=self.energy_manager.start_time
         )
         
-        # 保存原始_process_timestep方法
+        # 保存原始_process_timestep方法，并替换为增强版本
         self.original_process_timestep = self.energy_manager._process_timestep
+        self.energy_manager._process_timestep = types.MethodType(self._enhanced_process_timestep, self.energy_manager)
         
         # 重置内部状态
         self.current_hour = 0

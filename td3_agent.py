@@ -65,61 +65,60 @@ class TD3Agent:
         self.total_it = 0  # 更新次数计数
     
     def select_action(self, state, add_noise=True, noise_scale=0.1):
-    """根据当前状态选择动作
-    
-    Args:
-        state: 当前状态
-        add_noise: 是否添加探索噪声
-        noise_scale: 噪声比例
+        """根据当前状态选择动作
         
-    Returns:
-        action: 选择的动作
-    """
-    # 确保状态是适当形状的张量
-    if isinstance(state, np.ndarray):
-        state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
-    else:
-        state_tensor = torch.FloatTensor(state).reshape(1, -1).to(self.device)
-        
-    # 设置为评估模式以避免BatchNorm/Dropout问题
-    self.actor.eval()
-        
-    with torch.no_grad():
-        action = self.actor(state_tensor).cpu().data.numpy().flatten()
-    
-    # 恢复到训练模式
-    self.actor.train()
-        
-    # 添加探索噪声
-    if add_noise:
-        # 使用OU噪声代替高斯噪声以获得更好的探索性能
-        noise = self._generate_ou_noise(action.shape, noise_scale)
-        action = action + noise
-        action = np.clip(action, -self.max_action, self.max_action)
+        Args:
+            state: 当前状态
+            add_noise: 是否添加探索噪声
+            noise_scale: 噪声比例
             
-    return action
-
-    # 添加OU噪声生成方法
-def _generate_ou_noise(self, shape, scale=0.1, theta=0.15, dt=1e-2):
-    """生成Ornstein-Uhlenbeck噪声，比简单的高斯噪声更适合连续控制
-    
-    Args:
-        shape: 噪声形状
-        scale: 噪声幅度
-        theta: 均值回归速率
-        dt: 时间步长
+        Returns:
+            action: 选择的动作
+        """
+        # 确保状态是适当形状的张量
+        if isinstance(state, np.ndarray):
+            state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
+        else:
+            state_tensor = torch.FloatTensor(state).reshape(1, -1).to(self.device)
+            
+        # 设置为评估模式以避免BatchNorm/Dropout问题
+        self.actor.eval()
+            
+        with torch.no_grad():
+            action = self.actor(state_tensor).cpu().data.numpy().flatten()
         
-    Returns:
-        noise: OU噪声
-    """
-    if not hasattr(self, 'noise'):
-        self.noise = np.zeros(shape)
+        # 恢复到训练模式
+        self.actor.train()
+            
+        # 添加探索噪声
+        if add_noise:
+            # 使用OU噪声代替高斯噪声以获得更好的探索性能
+            noise = self._generate_ou_noise(action.shape, noise_scale)
+            action = action + noise
+            action = np.clip(action, -self.max_action, self.max_action)
+                
+        return action
     
-    x = self.noise
-    dx = theta * (0 - x) * dt + scale * np.random.randn(*shape) * np.sqrt(dt)
-    self.noise = x + dx
-    
-    return self.noise
+    def _generate_ou_noise(self, shape, scale=0.1, theta=0.15, dt=1e-2):
+        """生成Ornstein-Uhlenbeck噪声，比简单的高斯噪声更适合连续控制
+        
+        Args:
+            shape: 噪声形状
+            scale: 噪声幅度
+            theta: 均值回归速率
+            dt: 时间步长
+            
+        Returns:
+            noise: OU噪声
+        """
+        if not hasattr(self, 'noise'):
+            self.noise = np.zeros(shape)
+        
+        x = self.noise
+        dx = theta * (0 - x) * dt + scale * np.random.randn(*shape) * np.sqrt(dt)
+        self.noise = x + dx
+        
+        return self.noise
     
     def update(self, replay_buffer, batch_size=256):
         """更新神经网络

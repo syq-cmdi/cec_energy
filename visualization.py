@@ -337,7 +337,6 @@ def plot_comparison(results, save_path):
             f.write(f"  Difference: {rl_metrics[metric] - baseline_metrics[metric]:.2f}\n")
             f.write(f"  Improvement: {improvements[metric]:.2f}%\n\n")
 
-# 使用可视化函数的接口配置
 def visualize_results(results, save_dir):
     """
     将原始能量管理器的可视化方法包装为兼容RL比较
@@ -366,8 +365,8 @@ def visualize_results(results, save_dir):
         
         # 绘制云储能能量水平
         plt.figure(figsize=(10, 6))
-        energy_levels = results['cloud_storage']['energy_level_history']
-        plt.plot(timestamps[:len(energy_levels)], energy_levels, 'b-')
+        energy_levels = results['cloud_storage']['energy_level_history'][:-1]  # 移除多余的点
+        plt.plot(timestamps, energy_levels[:len(timestamps)], 'b-')  # 确保长度匹配
         plt.title('Cloud Storage Energy Level')
         plt.xlabel('Time (hours)')
         plt.ylabel('Energy (kWh)')
@@ -378,8 +377,8 @@ def visualize_results(results, save_dir):
         # 绘制节点SOC
         plt.figure(figsize=(10, 6))
         for node_id, node_data in results['edge_nodes'].items():
-            soc_history = node_data['soc_history']
-            plt.plot(timestamps[:len(soc_history)], soc_history, label=f'Node {node_id}')
+            soc_history = node_data['soc_history'][:-1]  # 移除多余的点
+            plt.plot(timestamps, soc_history[:len(timestamps)], label=f'Node {node_id}')  # 确保长度匹配
         plt.title('Edge Node SOC')
         plt.xlabel('Time (hours)')
         plt.ylabel('State of Charge')
