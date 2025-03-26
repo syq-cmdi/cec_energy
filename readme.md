@@ -130,10 +130,10 @@ results = enhanced_manager.run_simulation()
 
 ```
 @misc{rl-cloud-edge-energy,
-  author = {Your Name},
+  author = {Rishi},
   title = {基于强化学习的云边能量管理系统},
   year = {2025},
   publisher = {GitHub},
-  url = {https://github.com/yourusername/rl-cloud-edge-energy}
+  url = {https://github.com/yourusername/rl-cloud-edge-energy)
 }
 ```
